@@ -22,7 +22,7 @@ Open your terminal and run the following commands:
 
 ```bash
 # Navigate to the backend directory
-cd /home/prabandhnaik/Desktop/Project/Exam/backend
+cd /backend
 
 # Create a virtual environment (if you haven't already)
 python3 -m venv venv
@@ -50,7 +50,7 @@ Open a **new terminal window** and run the following commands:
 
 ```bash
 # Navigate to the frontend directory
-cd /home/prabandhnaik/Desktop/Project/Exam/frontend
+cd /frontend
 
 # Install all Node.js dependencies
 npm install
