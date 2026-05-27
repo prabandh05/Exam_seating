@@ -81,9 +81,12 @@ def get_duties(user: dict = Depends(require_invigilator), db: Session = Depends(
 @router.get("/duties/{duty_id}/seating")
 def get_duty_seating(duty_id: int, user: dict = Depends(require_invigilator), db: Session = Depends(get_db)):
     inv = user["user"]
-    duty = db.query(InvigilatorDuty).filter(
-        InvigilatorDuty.id == duty_id, InvigilatorDuty.invigilator_id == inv.id
-    ).first()
+    duty = (
+        db.query(InvigilatorDuty)
+        .options(joinedload(InvigilatorDuty.exam).joinedload(Exam.subject))
+        .filter(InvigilatorDuty.id == duty_id, InvigilatorDuty.invigilator_id == inv.id)
+        .first()
+    )
     if not duty:
         raise HTTPException(404, "Duty not found")
 

@@ -30,7 +30,7 @@ def get_seating_by_exam(db: Session, exam_id: int) -> List[SeatingArrangement]:
 def get_seating_by_exam_hall(db: Session, exam_id: int, hall_id: int) -> List[SeatingArrangement]:
     return (
         db.query(SeatingArrangement)
-        .options(joinedload(SeatingArrangement.student), joinedload(SeatingArrangement.exam).joinedload(Exam.subject))
+        .options(joinedload(SeatingArrangement.student), joinedload(SeatingArrangement.exam).joinedload(Exam.subject), joinedload(SeatingArrangement.attendance))
         .filter(SeatingArrangement.exam_id == exam_id, SeatingArrangement.hall_id == hall_id)
         .order_by(SeatingArrangement.row_number, SeatingArrangement.column_number)
         .all()

@@ -22,7 +22,7 @@ const DutyDetails: React.FC = () => {
       setHallNumber(res.data.hall_number || '');
       const initial: Record<number, string> = {};
       res.data.seatings.forEach((s: any) => {
-        if (s.attendance_status) initial[s.id] = s.attendance_status;
+        initial[s.id] = s.attendance_status || 'present';
       });
       setAttendance(initial);
     }).catch(() => message.error('Failed to load seating')).finally(() => setLoading(false));
