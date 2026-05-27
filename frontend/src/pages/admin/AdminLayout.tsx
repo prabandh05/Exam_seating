@@ -4,7 +4,6 @@ import { Layout, Menu, Button, Avatar, Dropdown } from 'antd';
 import {
   DashboardOutlined, TeamOutlined, BookOutlined, BankOutlined,
   ScheduleOutlined, AppstoreOutlined, UserSwitchOutlined,
-  CheckSquareOutlined, FileTextOutlined, BellOutlined,
   AuditOutlined, LogoutOutlined, MenuFoldOutlined, MenuUnfoldOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../../context/AuthContext';
@@ -15,7 +14,7 @@ import HallManagement from './HallManagement';
 import ExamManagement from './ExamManagement';
 import SeatingArrangement from './SeatingArrangement';
 import InvigilatorManagement from './InvigilatorManagement';
-import NotificationsPage from './NotificationsPage';
+
 import AuditLogsPage from './AuditLogsPage';
 
 const { Sider, Header, Content } = Layout;
@@ -34,7 +33,7 @@ const AdminLayout: React.FC = () => {
     { key: '/admin/exams', icon: <ScheduleOutlined />, label: 'Exams' },
     { key: '/admin/seating', icon: <AppstoreOutlined />, label: 'Seating' },
     { key: '/admin/invigilators', icon: <UserSwitchOutlined />, label: 'Invigilators' },
-    { key: '/admin/notifications', icon: <BellOutlined />, label: 'Notifications' },
+
     { key: '/admin/audit-logs', icon: <AuditOutlined />, label: 'Audit Logs' },
   ];
 
@@ -78,7 +77,7 @@ const AdminLayout: React.FC = () => {
             <Route path="/exams" element={<ExamManagement />} />
             <Route path="/seating" element={<SeatingArrangement />} />
             <Route path="/invigilators" element={<InvigilatorManagement />} />
-            <Route path="/notifications" element={<NotificationsPage />} />
+
             <Route path="/audit-logs" element={<AuditLogsPage />} />
           </Routes>
         </Content>

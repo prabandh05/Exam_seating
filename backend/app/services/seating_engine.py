@@ -169,13 +169,15 @@ class SeatingEngine:
 
                     # Apply mode-specific skipping rules
                     if mode == SeatingModeEnum.ALTERNATE_SEATING:
-                        # Alternate seating: (row + col) % 2 == 0
-                        if (row + col) % 2 != 0:
+                        # Alternate seating: place on odd columns only (1, 3, 5...)
+                        # This leaves one empty seat between every two students in a row
+                        if col % 2 == 0:
                             continue
 
                     elif mode == SeatingModeEnum.SKIP_BENCH:
-                        # Skip Bench: each bench has 2 seats. Column c belongs to bench (c - 1) // 2.
-                        # We only place on alternate benches.
+                        # Skip Bench: each bench = 2 consecutive seats (cols 1-2, 3-4, 5-6...)
+                        # Place students only on odd-indexed benches (bench 0, 2, 4...)
+                        # Bench index: (col - 1) // 2  →  cols 1-2 = bench 0, cols 3-4 = bench 1, etc.
                         bench_idx = (col - 1) // 2
                         if bench_idx % 2 != 0:
                             continue

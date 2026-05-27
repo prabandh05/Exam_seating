@@ -118,6 +118,8 @@ export const invigilatorAPI = {
   getDutySeating: (dutyId: number) => api.get(`/invigilator/duties/${dutyId}/seating`),
   markAttendance: (dutyId: number, data: any) =>
     api.post(`/invigilator/attendance/${dutyId}`, data),
+  completeDuty: (dutyId: number) =>
+    api.post(`/invigilator/duties/${dutyId}/complete`),
   getProfile: () => api.get('/invigilator/profile'),
 };
 

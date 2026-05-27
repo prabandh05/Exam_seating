@@ -19,6 +19,12 @@ from app.core.enums import AttendanceStatusEnum
 router = APIRouter(prefix="/api/invigilator", tags=["Invigilator"])
 
 
+def _compute_zone(row_number: int, rows_per_zone: int = 3) -> str:
+    """Compute zone label from row number. Zone A = rows 1-3, Zone B = rows 4-6, etc."""
+    zone_idx = (row_number - 1) // rows_per_zone
+    return chr(ord('A') + zone_idx)
+
+
 @router.get("/dashboard")
 def invigilator_dashboard(user: dict = Depends(require_invigilator), db: Session = Depends(get_db)):
     inv = user["user"]
@@ -29,27 +35,33 @@ def invigilator_dashboard(user: dict = Depends(require_invigilator), db: Session
         .all()
     )
     upcoming = []
+    past = []
     for d in duties:
+        duty_data = {
+            "id": d.id, "invigilator_id": inv.id, "invigilator_name": inv.name,
+            "exam_id": d.exam_id, "subject_name": d.exam.subject.subject_name if d.exam and d.exam.subject else "",
+            "exam_date": str(d.exam.exam_date) if d.exam else "", "start_time": str(d.exam.start_time) if d.exam else "",
+            "end_time": str(d.exam.end_time) if d.exam else "", "hall_id": d.hall_id,
+            "hall_number": d.hall.hall_number if d.hall else "", "created_at": d.created_at,
+            "status": d.exam.status if d.exam else "",
+        }
         if d.exam and d.exam.exam_date >= date.today():
-            upcoming.append({
-                "id": d.id, "invigilator_id": inv.id, "invigilator_name": inv.name,
-                "exam_id": d.exam_id, "subject_name": d.exam.subject.subject_name if d.exam.subject else "",
-                "exam_date": str(d.exam.exam_date), "start_time": str(d.exam.start_time),
-                "end_time": str(d.exam.end_time), "hall_id": d.hall_id,
-                "hall_number": d.hall.hall_number if d.hall else "", "created_at": d.created_at,
-            })
+            upcoming.append(duty_data)
+        else:
+            past.append(duty_data)
     return {
-        "invigilator": inv, "upcoming_duties": upcoming,
+        "invigilator": inv, "upcoming_duties": upcoming, "past_duties": past,
         "total_duties_assigned": len(duties), "has_duties": len(duties) > 0,
     }
 
 
 @router.get("/duties")
 def get_duties(user: dict = Depends(require_invigilator), db: Session = Depends(get_db)):
+    inv = user["user"]
     duties = (
         db.query(InvigilatorDuty)
         .options(joinedload(InvigilatorDuty.exam).joinedload(Exam.subject), joinedload(InvigilatorDuty.hall))
-        .filter(InvigilatorDuty.invigilator_id == user["user_id"])
+        .filter(InvigilatorDuty.invigilator_id == inv.id)
         .all()
     )
     result = []
@@ -68,11 +80,16 @@ def get_duties(user: dict = Depends(require_invigilator), db: Session = Depends(
 
 @router.get("/duties/{duty_id}/seating")
 def get_duty_seating(duty_id: int, user: dict = Depends(require_invigilator), db: Session = Depends(get_db)):
+    inv = user["user"]
     duty = db.query(InvigilatorDuty).filter(
-        InvigilatorDuty.id == duty_id, InvigilatorDuty.invigilator_id == user["user_id"]
+        InvigilatorDuty.id == duty_id, InvigilatorDuty.invigilator_id == inv.id
     ).first()
     if not duty:
         raise HTTPException(404, "Duty not found")
+
+    # Get hall info for zone computation
+    hall = db.query(Hall).filter(Hall.id == duty.hall_id).first()
+
     seatings = seating_crud.get_seating_by_exam_hall(db, duty.exam_id, duty.hall_id)
     result = []
     for s in seatings:
@@ -80,29 +97,78 @@ def get_duty_seating(duty_id: int, user: dict = Depends(require_invigilator), db
         result.append({
             "id": s.id, "seat_number": s.seat_number, "row_number": s.row_number,
             "column_number": s.column_number,
+            "zone": _compute_zone(s.row_number),
             "student_name": s.student.name if s.student else "",
             "register_number": s.student.register_number if s.student else "",
             "department": s.student.department if s.student else "",
             "attendance_status": att_status,
         })
-    return {"seatings": result, "total": len(result)}
+
+    # Get exam info for the duty
+    exam_info = None
+    if duty.exam:
+        exam_info = {
+            "id": duty.exam.id,
+            "subject_name": duty.exam.subject.subject_name if duty.exam.subject else "",
+            "exam_date": str(duty.exam.exam_date),
+            "start_time": str(duty.exam.start_time),
+            "end_time": str(duty.exam.end_time),
+            "status": duty.exam.status,
+        }
+
+    return {
+        "seatings": result, "total": len(result),
+        "hall_number": hall.hall_number if hall else "",
+        "exam_info": exam_info,
+    }
 
 
 @router.post("/attendance/{duty_id}")
 def mark_attendance(duty_id: int, data: BulkAttendanceRequest,
                     user: dict = Depends(require_invigilator), db: Session = Depends(get_db)):
+    inv = user["user"]
     duty = db.query(InvigilatorDuty).filter(
-        InvigilatorDuty.id == duty_id, InvigilatorDuty.invigilator_id == user["user_id"]
+        InvigilatorDuty.id == duty_id, InvigilatorDuty.invigilator_id == inv.id
     ).first()
     if not duty:
         raise HTTPException(404, "Duty not found")
     count = 0
     for rec in data.attendance_records:
-        att_crud.mark_attendance(db, rec.seating_id, rec.status, user["user_id"])
+        att_crud.mark_attendance(db, rec.seating_id, rec.status, inv.id)
         count += 1
-    create_audit_log(db, user["user_id"], "invigilator", "mark_attendance", "attendance",
+    create_audit_log(db, inv.id, "invigilator", "mark_attendance", "attendance",
                      new_value={"duty_id": duty_id, "count": count})
     return {"message": f"Marked {count} attendance records"}
+
+
+@router.post("/duties/{duty_id}/complete")
+def mark_duty_complete(duty_id: int, user: dict = Depends(require_invigilator), db: Session = Depends(get_db)):
+    """Mark a duty's exam as completed by the invigilator."""
+    inv = user["user"]
+    duty = db.query(InvigilatorDuty).filter(
+        InvigilatorDuty.id == duty_id, InvigilatorDuty.invigilator_id == inv.id
+    ).first()
+    if not duty:
+        raise HTTPException(404, "Duty not found")
+
+    exam = duty.exam
+    if not exam:
+        raise HTTPException(404, "Exam not found")
+
+    if exam.status == "completed":
+        return {"message": "Exam is already marked as completed"}
+
+    if exam.status not in ("published", "ongoing"):
+        raise HTTPException(400, f"Cannot complete exam in '{exam.status}' status. Exam must be published or ongoing.")
+
+    # Update exam status to completed
+    exam.status = "completed"
+    db.add(exam)
+    db.commit()
+
+    create_audit_log(db, inv.id, "invigilator", "complete_exam", "exam", exam.id,
+                     new_value={"duty_id": duty_id})
+    return {"message": "Exam marked as completed successfully"}
 
 
 @router.get("/profile")

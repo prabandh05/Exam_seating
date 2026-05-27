@@ -43,6 +43,7 @@ const SeatingArrangement: React.FC = () => {
   const [selectedHalls, setSelectedHalls] = useState<number[]>([]);
   const [mode, setMode] = useState('mixed_subject');
   const [generating, setGenerating] = useState(false);
+  const [previewData, setPreviewData] = useState<any>(null);
 
   // Tab 2: Manual editor
   const [manualExamId, setManualExamId] = useState<number | null>(null);
@@ -83,6 +84,7 @@ const SeatingArrangement: React.FC = () => {
         if (res.data.conflicts_detected?.length) {
           Modal.warning({ title: 'Warning', content: res.data.conflicts_detected.join('\n') });
         }
+        setPreviewData(res.data);
         fetchMasterData();
       } else {
         message.error(res.data.message);
@@ -91,6 +93,25 @@ const SeatingArrangement: React.FC = () => {
       message.error(err.response?.data?.detail || 'Generation failed');
     } finally {
       setGenerating(false);
+    }
+  };
+
+  const handleConfirmPreview = () => {
+    setPreviewData(null);
+    message.success('Seating arrangement saved successfully');
+    setActiveTab('3'); // Switch to Current Seating view
+  };
+
+  const handleDiscardPreview = async () => {
+    try {
+      for (const examId of selectedExams) {
+        await adminAPI.clearSeating(examId);
+      }
+      setPreviewData(null);
+      message.success('Generated seating discarded');
+      fetchMasterData();
+    } catch {
+      message.error('Failed to discard seating');
     }
   };
 
@@ -386,10 +407,29 @@ const SeatingArrangement: React.FC = () => {
                     </div>
                   </Space>
                 </Card>
-                <Alert
-                  message="After generating, switch to the Current Seating tab to review the result, or use the Interactive Editor to make manual adjustments."
-                  type="info" showIcon
-                />
+                {previewData ? (
+                  <Card title="Generated Seating Preview" style={{ borderRadius: 8, border: '1px solid var(--primary)' }}
+                        extra={
+                          <Space>
+                            <Button danger onClick={handleDiscardPreview}>Discard</Button>
+                            <Button type="primary" onClick={handleConfirmPreview}>Confirm & Save</Button>
+                          </Space>
+                        }>
+                    <Alert message="Review the generated seating below. Click Confirm to finalize or Discard to try again." type="info" showIcon style={{ marginBottom: 16 }} />
+                    <Table
+                      dataSource={previewData.preview_seatings || []}
+                      rowKey={(r: any) => `${r.exam_id}-${r.seat_number}`}
+                      columns={viewColumns}
+                      pagination={{ pageSize: 10 }}
+                      scroll={{ x: true }}
+                    />
+                  </Card>
+                ) : (
+                  <Alert
+                    message="After generating, review the preview here before confirming, or use the Interactive Editor to make manual adjustments."
+                    type="info" showIcon
+                  />
+                )}
               </Space>
             ),
           },
@@ -468,24 +508,31 @@ const SeatingArrangement: React.FC = () => {
             label: <span><TableOutlined /> Current Seating</span>,
             children: (
               <Space direction="vertical" style={{ width: '100%', paddingTop: 16 }} size="large">
-                <Card style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 8 }}>
-                  <Space wrap align="center">
-                    <div style={{ fontWeight: 500 }}>Select Exam to View:</div>
-                    <Select
-                      showSearch placeholder="Choose exam" style={{ minWidth: 320 }}
-                      optionFilterProp="label"
-                      onChange={loadViewSeating}
-                      options={exams.map(e => ({
-                        label: `${e.subject_name} — ${e.exam_date} (${e.status?.toUpperCase()})`,
-                        value: e.id,
-                      }))}
-                    />
-                    {viewExamId && (
+                <Card title="Select Exam to View Seating" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 8 }}>
+                  <Table 
+                    dataSource={exams.filter(e => e.total_students_assigned > 0 || e.status === 'published' || e.status === 'ongoing' || e.status === 'completed')}
+                    rowKey="id"
+                    pagination={{ pageSize: 5 }}
+                    onRow={(record) => ({
+                      onClick: () => loadViewSeating(record.id),
+                      style: { cursor: 'pointer', background: viewExamId === record.id ? 'var(--bg-active)' : undefined }
+                    })}
+                    columns={[
+                      { title: 'Subject', dataIndex: 'subject_name', key: 'sub' },
+                      { title: 'Department', dataIndex: 'department', key: 'dep' },
+                      { title: 'Date', dataIndex: 'exam_date', key: 'date' },
+                      { title: 'Status', dataIndex: 'status', key: 'status', render: (v: any) => <Tag color={STATUS_COLOR[v] || 'default'}>{v?.toUpperCase()}</Tag> },
+                      { title: 'Students Seated', dataIndex: 'total_students_assigned', key: 'count', render: (v: any) => <Badge count={v} showZero color="#1677ff" /> },
+                      { title: 'Action', key: 'action', render: (_: any, r: any) => <Button type={viewExamId === r.id ? 'primary' : 'default'} onClick={(e) => { e.stopPropagation(); loadViewSeating(r.id); }}>View Seating</Button>}
+                    ]}
+                  />
+                  {viewExamId && (
+                    <div style={{ marginTop: 16, textAlign: 'right' }}>
                       <Button icon={<ReloadOutlined />} onClick={() => loadViewSeating(viewExamId)}>
-                        Refresh
+                        Refresh Data
                       </Button>
-                    )}
-                  </Space>
+                    </div>
+                  )}
                 </Card>
 
                 {viewConflicts?.has_conflicts && (

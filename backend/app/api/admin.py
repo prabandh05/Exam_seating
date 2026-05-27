@@ -295,6 +295,24 @@ def generate_seating(data: GenerateSeatingRequest, admin: dict = Depends(require
                 raise HTTPException(status_code=400, detail=conflict)
     engine = SeatingEngine(db)
     result = engine.generate(data.exam_ids, data.hall_ids, data.mode, data.clear_existing)
+    # Attach generated seatings per exam for frontend preview
+    if result.get("success"):
+        preview = []
+        for eid in data.exam_ids:
+            seatings = seating_crud.get_seating_by_exam(db, eid)
+            for s in seatings:
+                preview.append({
+                    "exam_id": s.exam_id,
+                    "hall_number": s.hall.hall_number if s.hall else "",
+                    "seat_number": s.seat_number,
+                    "row_number": s.row_number,
+                    "column_number": s.column_number,
+                    "student_name": s.student.name if s.student else "",
+                    "register_number": s.student.register_number if s.student else "",
+                    "department": s.student.department if s.student else "",
+                    "subject_name": s.exam.subject.subject_name if s.exam and s.exam.subject else "",
+                })
+        result["preview_seatings"] = preview
     create_audit_log(db, admin["user_id"], "admin", "generate_seating", "seating",
                      new_value={"mode": data.mode.value, "exams": data.exam_ids})
     return result

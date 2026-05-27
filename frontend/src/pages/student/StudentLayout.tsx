@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { Layout, Menu, Button, Avatar, Dropdown } from 'antd';
-import { DashboardOutlined, BellOutlined, LogoutOutlined, MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons';
+import { DashboardOutlined, LogoutOutlined, MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons';
 import { useAuth } from '../../context/AuthContext';
 import StudentDashboard from './StudentDashboard';
-import StudentNotifications from './StudentNotifications';
+
 
 const { Sider, Header, Content } = Layout;
 
@@ -16,7 +16,7 @@ const StudentLayout: React.FC = () => {
 
   const menuItems = [
     { key: '/student', icon: <DashboardOutlined />, label: 'Dashboard' },
-    { key: '/student/notifications', icon: <BellOutlined />, label: 'Notifications' },
+
   ];
 
   const handleLogout = () => { logout(); navigate('/login'); };
@@ -40,7 +40,7 @@ const StudentLayout: React.FC = () => {
         <Content className="app-content">
           <Routes>
             <Route path="/" element={<StudentDashboard />} />
-            <Route path="/notifications" element={<StudentNotifications />} />
+
           </Routes>
         </Content>
       </Layout>
