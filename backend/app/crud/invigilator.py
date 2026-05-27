@@ -1,5 +1,6 @@
 """CRUD operations for Invigilator management."""
 
+from datetime import date, time
 from typing import Optional, List, Tuple
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
@@ -117,14 +118,18 @@ def get_invigilator_duties(
 def assign_duty(
     db: Session,
     invigilator_db_id: int,
-    exam_id: int,
     hall_id: int,
+    exam_date: date,
+    start_time: time,
+    end_time: time,
 ) -> InvigilatorDuty:
-    """Assign an invigilator to a hall for an exam."""
+    """Assign an invigilator to a hall for a specific time slot."""
     duty = InvigilatorDuty(
         invigilator_id=invigilator_db_id,
-        exam_id=exam_id,
         hall_id=hall_id,
+        exam_date=exam_date,
+        start_time=start_time,
+        end_time=end_time,
     )
     db.add(duty)
 
@@ -138,15 +143,17 @@ def assign_duty(
     return duty
 
 
-def get_duty_by_exam_hall(
-    db: Session, exam_id: int, hall_id: int
+def get_duty_by_slot_hall(
+    db: Session, hall_id: int, exam_date: date, start_time: time, end_time: time
 ) -> Optional[InvigilatorDuty]:
-    """Check if a duty already exists for an exam-hall combination."""
+    """Check if a duty already exists for a time slot-hall combination."""
     return (
         db.query(InvigilatorDuty)
         .filter(
-            InvigilatorDuty.exam_id == exam_id,
             InvigilatorDuty.hall_id == hall_id,
+            InvigilatorDuty.exam_date == exam_date,
+            InvigilatorDuty.start_time == start_time,
+            InvigilatorDuty.end_time == end_time,
         )
         .first()
     )

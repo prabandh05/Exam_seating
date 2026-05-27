@@ -138,6 +138,10 @@ def validate_seating_arrangement(db: Session, exam_id: int) -> List[str]:
         if key in seat_map:
             conflicts.append(f"Duplicate seat {s.seat_number} in hall {s.hall_id}")
         seat_map[key] = s.student_id
+
+    return conflicts
+
+    
 def check_exam_hall_time_conflict(db: Session, hall_id: int, exam_date: date, start_time: time, end_time: time, exclude_exam_id: Optional[int] = None) -> Optional[str]:
     """Check if a hall's total seats are already fully occupied during the given date/time slot."""
     hall = db.query(Hall).filter(Hall.id == hall_id).first()

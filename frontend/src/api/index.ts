@@ -65,6 +65,7 @@ export const adminAPI = {
   getHall: (id: number) => api.get(`/admin/halls/${id}`),
   updateHall: (id: number, data: any) => api.put(`/admin/halls/${id}`, data),
   deleteHall: (id: number) => api.delete(`/admin/halls/${id}`),
+  getHallExams: (id: number) => api.get(`/admin/halls/${id}/exams`),
   toggleHall: (id: number, data: { is_enabled: boolean }) =>
     api.patch(`/admin/halls/${id}/toggle`, data),
   // Exams

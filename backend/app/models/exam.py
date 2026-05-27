@@ -38,9 +38,6 @@ class Exam(Base):
     seating_arrangements = relationship(
         "SeatingArrangement", back_populates="exam", cascade="all, delete-orphan"
     )
-    invigilator_duties = relationship(
-        "InvigilatorDuty", back_populates="exam", cascade="all, delete-orphan"
-    )
 
     def __repr__(self):
         return f"<Exam(id={self.id}, date={self.exam_date}, status='{self.status}')>"

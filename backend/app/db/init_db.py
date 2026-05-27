@@ -27,6 +27,20 @@ def init_db():
                 db.rollback()
                 print(f"[INIT] Failed to add column: {e}")
 
+        # Check if invigilator_duties has exam_date, if not, drop and recreate
+        try:
+            db.execute(text("SELECT exam_date FROM invigilator_duties LIMIT 1"))
+        except Exception:
+            db.rollback()
+            try:
+                db.execute(text("DROP TABLE IF EXISTS invigilator_duties"))
+                db.commit()
+                Base.metadata.create_all(bind=engine)
+                print("[INIT] Recreated invigilator_duties for slot-based schema")
+            except Exception as e:
+                db.rollback()
+                print(f"[INIT] Failed to recreate invigilator_duties: {e}")
+
         # Seed default admin
         existing = db.query(Admin).filter(Admin.username == settings.DEFAULT_ADMIN_USERNAME).first()
         if not existing:

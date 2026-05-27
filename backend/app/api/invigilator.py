@@ -30,22 +30,31 @@ def invigilator_dashboard(user: dict = Depends(require_invigilator), db: Session
     inv = user["user"]
     duties = (
         db.query(InvigilatorDuty)
-        .options(joinedload(InvigilatorDuty.exam).joinedload(Exam.subject), joinedload(InvigilatorDuty.hall))
+        .options(joinedload(InvigilatorDuty.hall))
         .filter(InvigilatorDuty.invigilator_id == inv.id)
         .all()
     )
     upcoming = []
     past = []
     for d in duties:
+        exams = db.query(Exam).options(joinedload(Exam.subject)).filter(
+            Exam.exam_date == d.exam_date,
+            Exam.start_time < d.end_time,
+            Exam.end_time > d.start_time,
+        ).all()
+        
+        subject_names = " / ".join([e.subject.subject_name for e in exams if e.subject])
+        status = exams[0].status if exams else "unknown"
+        
         duty_data = {
             "id": d.id, "invigilator_id": inv.id, "invigilator_name": inv.name,
-            "exam_id": d.exam_id, "subject_name": d.exam.subject.subject_name if d.exam and d.exam.subject else "",
-            "exam_date": str(d.exam.exam_date) if d.exam else "", "start_time": str(d.exam.start_time) if d.exam else "",
-            "end_time": str(d.exam.end_time) if d.exam else "", "hall_id": d.hall_id,
+            "subject_name": subject_names,
+            "exam_date": str(d.exam_date), "start_time": str(d.start_time),
+            "end_time": str(d.end_time), "hall_id": d.hall_id,
             "hall_number": d.hall.hall_number if d.hall else "", "created_at": d.created_at,
-            "status": d.exam.status if d.exam else "",
+            "status": status,
         }
-        if d.exam and d.exam.exam_date >= date.today():
+        if d.exam_date >= date.today():
             upcoming.append(duty_data)
         else:
             past.append(duty_data)
@@ -60,20 +69,29 @@ def get_duties(user: dict = Depends(require_invigilator), db: Session = Depends(
     inv = user["user"]
     duties = (
         db.query(InvigilatorDuty)
-        .options(joinedload(InvigilatorDuty.exam).joinedload(Exam.subject), joinedload(InvigilatorDuty.hall))
+        .options(joinedload(InvigilatorDuty.hall))
         .filter(InvigilatorDuty.invigilator_id == inv.id)
         .all()
     )
     result = []
     for d in duties:
+        exams = db.query(Exam).options(joinedload(Exam.subject)).filter(
+            Exam.exam_date == d.exam_date,
+            Exam.start_time < d.end_time,
+            Exam.end_time > d.start_time,
+        ).all()
+        
+        subject_names = " / ".join([e.subject.subject_name for e in exams if e.subject])
+        status = exams[0].status if exams else "unknown"
+
         result.append({
-            "id": d.id, "exam_id": d.exam_id,
-            "subject_name": d.exam.subject.subject_name if d.exam and d.exam.subject else "",
-            "exam_date": str(d.exam.exam_date) if d.exam else "",
-            "start_time": str(d.exam.start_time) if d.exam else "",
-            "end_time": str(d.exam.end_time) if d.exam else "",
+            "id": d.id,
+            "subject_name": subject_names,
+            "exam_date": str(d.exam_date),
+            "start_time": str(d.start_time),
+            "end_time": str(d.end_time),
             "hall_id": d.hall_id, "hall_number": d.hall.hall_number if d.hall else "",
-            "status": d.exam.status if d.exam else "",
+            "status": status,
         })
     return {"duties": result}
 
@@ -83,17 +101,29 @@ def get_duty_seating(duty_id: int, user: dict = Depends(require_invigilator), db
     inv = user["user"]
     duty = (
         db.query(InvigilatorDuty)
-        .options(joinedload(InvigilatorDuty.exam).joinedload(Exam.subject))
         .filter(InvigilatorDuty.id == duty_id, InvigilatorDuty.invigilator_id == inv.id)
         .first()
     )
     if not duty:
         raise HTTPException(404, "Duty not found")
 
-    # Get hall info for zone computation
     hall = db.query(Hall).filter(Hall.id == duty.hall_id).first()
+    
+    exams = db.query(Exam).options(joinedload(Exam.subject)).filter(
+        Exam.exam_date == duty.exam_date,
+        Exam.start_time < duty.end_time,
+        Exam.end_time > duty.start_time,
+    ).all()
+    exam_ids = [e.id for e in exams]
 
-    seatings = seating_crud.get_seating_by_exam_hall(db, duty.exam_id, duty.hall_id)
+    seatings = (
+        db.query(SeatingArrangement)
+        .options(joinedload(SeatingArrangement.student), joinedload(SeatingArrangement.exam).joinedload(Exam.subject), joinedload(SeatingArrangement.attendance))
+        .filter(SeatingArrangement.exam_id.in_(exam_ids), SeatingArrangement.hall_id == duty.hall_id)
+        .order_by(SeatingArrangement.row_number, SeatingArrangement.column_number)
+        .all()
+    )
+
     result = []
     for s in seatings:
         att_status = s.attendance.status if s.attendance else None
@@ -104,20 +134,20 @@ def get_duty_seating(duty_id: int, user: dict = Depends(require_invigilator), db
             "student_name": s.student.name if s.student else "",
             "register_number": s.student.register_number if s.student else "",
             "department": s.student.department if s.student else "",
+            "subject_name": s.exam.subject.subject_name if s.exam and s.exam.subject else "",
             "attendance_status": att_status,
         })
 
-    # Get exam info for the duty
-    exam_info = None
-    if duty.exam:
-        exam_info = {
-            "id": duty.exam.id,
-            "subject_name": duty.exam.subject.subject_name if duty.exam.subject else "",
-            "exam_date": str(duty.exam.exam_date),
-            "start_time": str(duty.exam.start_time),
-            "end_time": str(duty.exam.end_time),
-            "status": duty.exam.status,
-        }
+    subject_names = " / ".join([e.subject.subject_name for e in exams if e.subject])
+    status = exams[0].status if exams else "unknown"
+
+    exam_info = {
+        "subject_name": subject_names,
+        "exam_date": str(duty.exam_date),
+        "start_time": str(duty.start_time),
+        "end_time": str(duty.end_time),
+        "status": status,
+    }
 
     return {
         "seatings": result, "total": len(result),
@@ -146,7 +176,7 @@ def mark_attendance(duty_id: int, data: BulkAttendanceRequest,
 
 @router.post("/duties/{duty_id}/complete")
 def mark_duty_complete(duty_id: int, user: dict = Depends(require_invigilator), db: Session = Depends(get_db)):
-    """Mark a duty's exam as completed by the invigilator."""
+    """Mark a duty's exams as completed by the invigilator."""
     inv = user["user"]
     duty = db.query(InvigilatorDuty).filter(
         InvigilatorDuty.id == duty_id, InvigilatorDuty.invigilator_id == inv.id
@@ -154,24 +184,28 @@ def mark_duty_complete(duty_id: int, user: dict = Depends(require_invigilator), 
     if not duty:
         raise HTTPException(404, "Duty not found")
 
-    exam = duty.exam
-    if not exam:
-        raise HTTPException(404, "Exam not found")
+    exams = db.query(Exam).filter(
+        Exam.exam_date == duty.exam_date,
+        Exam.start_time < duty.end_time,
+        Exam.end_time > duty.start_time,
+    ).all()
 
-    if exam.status == "completed":
-        return {"message": "Exam is already marked as completed"}
+    if not exams:
+        raise HTTPException(404, "Exams not found")
 
-    if exam.status not in ("published", "ongoing"):
-        raise HTTPException(400, f"Cannot complete exam in '{exam.status}' status. Exam must be published or ongoing.")
+    for exam in exams:
+        if exam.status == "completed":
+            continue
+        if exam.status not in ("published", "ongoing"):
+            raise HTTPException(400, f"Cannot complete exam in '{exam.status}' status. Exam must be published or ongoing.")
+        exam.status = "completed"
+        db.add(exam)
 
-    # Update exam status to completed
-    exam.status = "completed"
-    db.add(exam)
     db.commit()
 
-    create_audit_log(db, inv.id, "invigilator", "complete_exam", "exam", exam.id,
+    create_audit_log(db, inv.id, "invigilator", "complete_exam", "exam", exams[0].id if exams else None,
                      new_value={"duty_id": duty_id})
-    return {"message": "Exam marked as completed successfully"}
+    return {"message": "Exams marked as completed successfully"}
 
 
 @router.get("/profile")

@@ -1,6 +1,6 @@
 """Invigilator schemas — request/response models for invigilator management."""
 
-from datetime import datetime
+from datetime import datetime, date, time
 from typing import Optional, List
 from pydantic import BaseModel, Field, EmailStr
 from app.core.enums import UserRoleEnum
@@ -52,8 +52,10 @@ class InvigilatorListResponse(BaseModel):
 class DutyAssignRequest(BaseModel):
     """Manual duty assignment request."""
     invigilator_id: int
-    exam_id: int
     hall_id: int
+    exam_date: date
+    start_time: time
+    end_time: time
 
 
 class DutyResponse(BaseModel):
@@ -61,7 +63,6 @@ class DutyResponse(BaseModel):
     id: int
     invigilator_id: int
     invigilator_name: str
-    exam_id: int
     subject_name: str
     exam_date: str
     start_time: str

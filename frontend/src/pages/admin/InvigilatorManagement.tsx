@@ -14,6 +14,7 @@ const InvigilatorManagement: React.FC = () => {
   const [assignForm] = Form.useForm();
   const [exams, setExams] = useState<any[]>([]);
   const [halls, setHalls] = useState<any[]>([]);
+  const [hallExams, setHallExams] = useState<any[]>([]);
 
   const fetchInvigilators = () => {
     setLoading(true);
@@ -37,11 +38,33 @@ const InvigilatorManagement: React.FC = () => {
 
   const handleAssignSubmit = async (values: any) => {
     try {
-      await adminAPI.assignDuty(values);
-      message.success('Duty assigned');
+      const selectedExams = exams.filter(e => values.exam_ids.includes(e.id));
+      const uniqueSlots = new Set(selectedExams.map(e => `${e.exam_date}|${e.start_time}|${e.end_time}`));
+      
+      for (const slot of uniqueSlots) {
+        const [exam_date, start_time, end_time] = slot.split('|');
+        const payload = {
+          invigilator_id: values.invigilator_id,
+          hall_id: values.hall_id,
+          exam_date,
+          start_time,
+          end_time
+        };
+        await adminAPI.assignDuty(payload);
+      }
+      message.success('Duty assigned successfully');
       setAssignModalOpen(false);
       assignForm.resetFields();
+      setHallExams([]);
     } catch (err: any) { message.error(err.response?.data?.detail || 'Assignment failed'); }
+  };
+
+  const handleHallChange = (hallId: number) => {
+    assignForm.setFieldsValue({ exam_ids: [] });
+    setHallExams([]);
+    adminAPI.getHallExams(hallId)
+      .then(res => setHallExams(res.data.exams))
+      .catch(() => message.error('Failed to fetch exams for this hall'));
   };
 
   const columns = [
@@ -54,7 +77,12 @@ const InvigilatorManagement: React.FC = () => {
     { title: 'Duties', dataIndex: 'total_duties', key: 'duties' },
     { title: 'Actions', key: 'actions', render: (_: any, r: any) => (
       <Space>
-        <Button size="small" onClick={() => { assignForm.setFieldsValue({ invigilator_id: r.id }); setAssignModalOpen(true); }}>Assign Duty</Button>
+        <Button size="small" onClick={() => { 
+          assignForm.resetFields();
+          setHallExams([]);
+          assignForm.setFieldsValue({ invigilator_id: r.id }); 
+          setAssignModalOpen(true); 
+        }}>Assign Duty</Button>
         <Button type="link" icon={<EditOutlined />} onClick={() => { setEditingId(r.id); form.setFieldsValue(r); setModalOpen(true); }} />
         <Popconfirm title="Delete?" onConfirm={async () => { await adminAPI.deleteInvigilator(r.id); message.success('Deleted'); fetchInvigilators(); }}>
           <Button type="link" danger icon={<DeleteOutlined />} />
@@ -92,11 +120,22 @@ const InvigilatorManagement: React.FC = () => {
       <Modal title="Assign Duty" open={assignModalOpen} onCancel={() => setAssignModalOpen(false)} onOk={() => assignForm.submit()}>
         <Form form={assignForm} layout="vertical" onFinish={handleAssignSubmit}>
           <Form.Item name="invigilator_id" hidden><Input /></Form.Item>
-          <Form.Item name="exam_id" label="Exam" rules={[{ required: true }]}>
-            <Select options={exams.map(e => ({ label: `${e.subject_name} (${e.exam_date})`, value: e.id }))} />
-          </Form.Item>
           <Form.Item name="hall_id" label="Hall" rules={[{ required: true }]}>
-             <Select options={halls.map(h => ({ label: h.hall_number, value: h.id }))} />
+             <Select 
+               options={halls.map(h => ({ label: h.hall_number, value: h.id }))} 
+               onChange={handleHallChange}
+             />
+          </Form.Item>
+          <Form.Item name="exam_ids" label="Exams (Subjects)" rules={[{ required: true, message: 'Please select at least one exam' }]}>
+            <Select 
+              mode="multiple" 
+              placeholder={hallExams.length ? "Select exams" : "Select a hall first to view its exams"}
+              disabled={hallExams.length === 0}
+              options={hallExams.map(e => ({ 
+                label: `${e.subject_name} (${e.exam_date} ${e.start_time} - ${e.end_time})`, 
+                value: e.id 
+              }))} 
+            />
           </Form.Item>
         </Form>
       </Modal>

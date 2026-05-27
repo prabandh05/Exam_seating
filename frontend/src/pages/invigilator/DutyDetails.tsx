@@ -100,6 +100,7 @@ const DutyDetails: React.FC = () => {
     { title: 'Reg No', dataIndex: 'register_number', key: 'reg' },
     { title: 'Name', dataIndex: 'student_name', key: 'name' },
     { title: 'Department', dataIndex: 'department', key: 'dept' },
+    { title: 'Subject', dataIndex: 'subject_name', key: 'subj' },
     {
       title: 'Attendance', key: 'attendance',
       render: (_: any, r: any) => (

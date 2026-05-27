@@ -2,7 +2,7 @@
 
 from datetime import datetime, timezone
 from sqlalchemy import (
-    Column, Integer, DateTime, ForeignKey, UniqueConstraint
+    Column, Integer, Date, Time, DateTime, ForeignKey, UniqueConstraint
 )
 from sqlalchemy.orm import relationship
 from app.db.database import Base
@@ -11,8 +11,8 @@ from app.db.database import Base
 class InvigilatorDuty(Base):
     __tablename__ = "invigilator_duties"
     __table_args__ = (
-        # One invigilator per hall per exam
-        UniqueConstraint("exam_id", "hall_id", name="uq_exam_hall_invigilator"),
+        # One invigilator per hall per time slot
+        UniqueConstraint("hall_id", "exam_date", "start_time", "end_time", name="uq_slot_hall_invigilator"),
     )
 
     id = Column(Integer, primary_key=True, autoincrement=True, index=True)
@@ -22,9 +22,9 @@ class InvigilatorDuty(Base):
         nullable=False,
         index=True,
     )
-    exam_id = Column(
-        Integer, ForeignKey("exams.id", ondelete="CASCADE"), nullable=False, index=True
-    )
+    exam_date = Column(Date, nullable=False, index=True)
+    start_time = Column(Time, nullable=False)
+    end_time = Column(Time, nullable=False)
     hall_id = Column(
         Integer, ForeignKey("halls.id", ondelete="CASCADE"), nullable=False, index=True
     )
@@ -34,11 +34,10 @@ class InvigilatorDuty(Base):
 
     # Relationships
     invigilator = relationship("Invigilator", back_populates="duties")
-    exam = relationship("Exam", back_populates="invigilator_duties")
     hall = relationship("Hall", back_populates="invigilator_duties")
 
     def __repr__(self):
         return (
             f"<InvigilatorDuty(id={self.id}, invigilator={self.invigilator_id}, "
-            f"exam={self.exam_id}, hall={self.hall_id})>"
+            f"date={self.exam_date}, hall={self.hall_id})>"
         )

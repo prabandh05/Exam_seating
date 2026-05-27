@@ -182,6 +182,28 @@ def toggle_hall(hall_id: int, data: HallToggleRequest, admin: dict = Depends(req
     if not h: raise HTTPException(404, "Hall not found")
     return h
 
+@router.get("/halls/{hall_id}/exams")
+def get_hall_exams(hall_id: int, admin: dict = Depends(require_admin), db: Session = Depends(get_db)):
+    """Get all published/ongoing exams that have seating arrangements in this hall."""
+    seatings = db.query(SeatingArrangement).filter(SeatingArrangement.hall_id == hall_id).all()
+    exam_ids = list(set([s.exam_id for s in seatings]))
+    
+    if not exam_ids:
+        return {"exams": []}
+        
+    exams = db.query(Exam).filter(Exam.id.in_(exam_ids), Exam.status.in_(["published", "ongoing"])).all()
+    
+    result = []
+    for e in exams:
+        result.append({
+            "id": e.id, 
+            "subject_name": e.subject.subject_name if e.subject else "",
+            "exam_date": str(e.exam_date), 
+            "start_time": str(e.start_time), 
+            "end_time": str(e.end_time),
+        })
+    return {"exams": result}
+
 # ─── Exams ───
 @router.get("/exams")
 def list_exams(page: int = 1, page_size: int = 20, status: Optional[str] = None,
@@ -546,14 +568,23 @@ def delete_invigilator(inv_id: int, admin: dict = Depends(require_admin), db: Se
 
 @router.post("/invigilators/assign")
 def assign_duty(data: DutyAssignRequest, admin: dict = Depends(require_admin), db: Session = Depends(get_db)):
-    if inv_crud.get_duty_by_exam_hall(db, data.exam_id, data.hall_id):
-        raise HTTPException(400, "Duty already assigned for this exam-hall")
-    exam = exam_crud.get_exam_by_id(db, data.exam_id)
-    if not exam: raise HTTPException(404, "Exam not found")
-    from app.services.conflict_manager import check_invigilator_time_conflict
-    conflict = check_invigilator_time_conflict(db, data.invigilator_id, exam)
-    if conflict: raise HTTPException(400, conflict)
-    duty = inv_crud.assign_duty(db, data.invigilator_id, data.exam_id, data.hall_id)
+    if inv_crud.get_duty_by_slot_hall(db, data.hall_id, data.exam_date, data.start_time, data.end_time):
+        raise HTTPException(400, "Duty already assigned for this time slot and hall")
+    
+    # We can't check 'check_invigilator_time_conflict' using a single 'exam' anymore, 
+    # but we can check if the invigilator is already assigned elsewhere during this time slot.
+    existing_duty = db.query(inv_crud.InvigilatorDuty).filter(
+        inv_crud.InvigilatorDuty.invigilator_id == data.invigilator_id,
+        inv_crud.InvigilatorDuty.exam_date == data.exam_date,
+        inv_crud.InvigilatorDuty.start_time < data.end_time,
+        inv_crud.InvigilatorDuty.end_time > data.start_time,
+    ).first()
+    if existing_duty:
+        raise HTTPException(400, "Invigilator is already assigned to a duty during this time slot")
+
+    duty = inv_crud.assign_duty(
+        db, data.invigilator_id, data.hall_id, data.exam_date, data.start_time, data.end_time
+    )
     create_audit_log(db, admin["user_id"], "admin", "assign_duty", "invigilator_duty", duty.id)
     return {"message": "Duty assigned", "duty_id": duty.id}
 
@@ -569,13 +600,21 @@ def auto_assign_duties(exam_id: int = Query(...), admin: dict = Depends(require_
     if not invs: raise HTTPException(400, "No active invigilators")
     invs_sorted = sorted(invs, key=lambda x: x.total_duties)
     assigned = 0
+    
     for hid in hall_ids:
-        if inv_crud.get_duty_by_exam_hall(db, exam_id, hid):
+        if inv_crud.get_duty_by_slot_hall(db, hid, exam.exam_date, exam.start_time, exam.end_time):
             continue
         for inv in invs_sorted:
-            from app.services.conflict_manager import check_invigilator_time_conflict
-            if not check_invigilator_time_conflict(db, inv.id, exam):
-                inv_crud.assign_duty(db, inv.id, exam_id, hid)
+            # Check if this invigilator already has a duty in this slot
+            existing_duty = db.query(inv_crud.InvigilatorDuty).filter(
+                inv_crud.InvigilatorDuty.invigilator_id == inv.id,
+                inv_crud.InvigilatorDuty.exam_date == exam.exam_date,
+                inv_crud.InvigilatorDuty.start_time < exam.end_time,
+                inv_crud.InvigilatorDuty.end_time > exam.start_time,
+            ).first()
+            
+            if not existing_duty:
+                inv_crud.assign_duty(db, inv.id, hid, exam.exam_date, exam.start_time, exam.end_time)
                 assigned += 1
                 invs_sorted = sorted(invs_sorted, key=lambda x: x.total_duties)
                 break
